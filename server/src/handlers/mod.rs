@@ -33,12 +33,15 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, "Forbidden".to_string(), msg, true),
             ApiError::BadRequest(c, m) => (StatusCode::BAD_REQUEST, c, m, false),
             ApiError::NotFound(c, m) => (StatusCode::NOT_FOUND, c, m, false),
-            ApiError::Internal(m) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "InternalError".to_string(),
-                m,
-                false,
-            ),
+            ApiError::Internal(m) => {
+                tracing::error!("Internal error: {}", m);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "InternalError".to_string(),
+                    "An internal error occurred".to_string(),
+                    false,
+                )
+            }
         };
         let body = Json(ErrorResponse {
             error: ErrorDetail {

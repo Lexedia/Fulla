@@ -173,7 +173,7 @@ pub async fn create_user(
     .bind(Uuid::new_v4())
     .bind(&payload.username)
     .bind(&password_hash)
-    .bind(payload.is_admin.unwrap_or(false))
+    .bind(payload.is_admin.unwrap_or_default())
     .fetch_one(&state.db)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
