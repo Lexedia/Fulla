@@ -44,7 +44,6 @@ pub async fn validate_auth(headers: &HeaderMap, db: &sqlx::PgPool) -> Result<DBT
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?
     .ok_or_else(|| ApiError::Unauthorized("Invalid or expired token".to_string()))?;
-    // Update last_used_at
     let db_clone = db.clone();
     let token_id = token_record.id;
     tokio::spawn(async move {
@@ -163,7 +162,6 @@ pub async fn register(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Generate Token
     let token = generate_token(user.id, user.is_admin)?;
 
     Ok(Json(AuthResponse {
@@ -335,7 +333,6 @@ pub async fn delete_token(
 ) -> Result<StatusCode, ApiError> {
     let user = validate_user_auth(&headers, &state.db).await?;
 
-    // Verify the token belongs to the user
     let result = sqlx::query("UPDATE tokens SET revoked = TRUE WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(user.id)

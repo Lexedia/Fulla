@@ -24,22 +24,8 @@ pub fn get_host_url(headers: &HeaderMap) -> Result<(String, String), ApiError> {
         }
     }
 
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .ok_or_else(|| {
-            ApiError::BadRequest(
-                "MissingHost".to_string(),
-                "Host header is required".to_string(),
-            )
-        })?
-        .to_string();
-
-    let scheme = if host.contains("localhost") || host.starts_with("127.0.0.1") {
-        "http".to_string()
-    } else {
-        "https".to_string()
-    };
-
-    Ok((scheme, host))
+    Err(ApiError::BadRequest(
+        "MissingBaseUrl".to_string(),
+        "No BASE_URL was set".to_string(),
+    ))
 }
