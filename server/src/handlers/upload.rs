@@ -2,7 +2,7 @@ use crate::AppState;
 use crate::handlers::ApiError;
 use crate::handlers::auth::validate_auth;
 use crate::models::{DBPackage, PublishResponse, SuccessMessage, SuccessResponse};
-use crate::utils::get_host_url;
+use crate::utils::get_base_url;
 use axum::{
     Json,
     extract::{Multipart, Path, State},
@@ -22,7 +22,7 @@ pub async fn publish_new_version(
 ) -> Result<Json<PublishResponse>, ApiError> {
     validate_auth(&headers, &state.db).await?;
 
-    let (scheme, host) = get_host_url(&headers)?;
+    let (scheme, host) = get_base_url()?;
     let upload_url = format!("{}://{}/api/upload", scheme, host);
 
     let mut fields = HashMap::new();
@@ -64,7 +64,7 @@ pub async fn upload_package(
     let temp_path = std::env::temp_dir().join(format!("fulla-upload-{}-{}", upload_id, token.id));
     std::fs::write(&temp_path, data).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let (scheme, host) = match get_host_url(&headers) {
+    let (scheme, host) = match get_base_url() {
         Ok((s, h)) => (s, h),
         Err(_) => ("http".to_string(), "localhost:3000".to_string()),
     };
@@ -140,7 +140,7 @@ pub async fn finalize_publish(
         .map_err(|e| ApiError::Internal(format!("Failed to store package: {}", e)))?;
     let _ = std::fs::remove_file(&temp_path);
 
-    let (scheme, host) = get_host_url(&headers)?;
+    let (scheme, host) = get_base_url()?;
     let archive_url = format!(
         "{}://{}/packages/{}/versions/{}.tar.gz",
         scheme, host, name, version

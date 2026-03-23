@@ -1,6 +1,6 @@
 use crate::handlers::ApiError;
 use crate::storage;
-use crate::{AppState, utils::get_host_url};
+use crate::{AppState, utils::get_base_url};
 use axum::{
     Json,
     body::Body,
@@ -99,7 +99,7 @@ pub async fn upload_avatar(
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to store avatar: {}", e)))?;
 
-    let (scheme, host) = get_host_url(&headers)?;
+    let (scheme, host) = get_base_url()?;
 
     let avatar_url = format!("{}://{}/_avatars/{}", scheme, host, user_id);
 
