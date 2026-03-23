@@ -5,6 +5,10 @@ use axum::{Json, extract::State};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+fn escape_filter_value(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 pub async fn search_packages(
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
     State(state): State<Arc<AppState>>,
@@ -24,7 +28,7 @@ pub async fn search_packages(
         let query_string = if q.is_empty() { "*" } else { &q };
 
         let mut filter_string = if let Some(owner) = params.get("owner") {
-            format!("owner_username = \"{}\"", owner)
+            format!("owner_username = \"{}\"", escape_filter_value(owner))
         } else {
             String::new()
         };
@@ -34,7 +38,7 @@ pub async fn search_packages(
             if !platforms.is_empty() {
                 let platform_filters: Vec<String> = platforms
                     .iter()
-                    .map(|p| format!("platforms = \"{}\"", p))
+                    .map(|p| format!("platforms = \"{}\"", escape_filter_value(p)))
                     .collect();
                 let p_filter = format!("({})", platform_filters.join(" OR "));
                 if filter_string.is_empty() {
