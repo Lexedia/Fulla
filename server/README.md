@@ -2,15 +2,6 @@
 
 A Dart package registry server written in Rust.
 
-## Features
-
-- Package publishing and management
-- User authentication and authorization
-- Package search with Meilisearch
-- Optional package analysis with Pana
-- Optional documentation generation with dartdoc
-- S3 or filesystem storage backends
-
 ## Docker Build Options
 
 The backend Docker image supports build arguments to control which analysis tools are installed:
@@ -59,39 +50,6 @@ INSTALL_PANA=false INSTALL_DARTDOC=false docker-compose build fulla-backend
 docker-compose up -d
 ```
 
-## GitHub Container Registry (GHCR)
-
-Pre-built images are automatically published to GHCR via GitHub Actions:
-
-### Available Images
-
-- **Full variant**: `ghcr.io/<username>/fulla-backend:latest`
-- **Minimal variant**: `ghcr.io/<username>/fulla-backend:minimal`
-
-### Pulling from GHCR
-
-```bash
-# Pull the latest full image
-docker pull ghcr.io/<username>/fulla-backend:latest
-
-# Pull the minimal image
-docker pull ghcr.io/<username>/fulla-backend:minimal
-
-# Pull a specific version
-docker pull ghcr.io/<username>/fulla-backend:v1.0.0
-```
-
-### Using GHCR Images in Docker Compose
-
-Update your `docker-compose.yml`:
-
-```yaml
-services:
-  fulla-backend:
-    image: ghcr.io/<username>/fulla-backend:latest
-    # ... rest of configuration
-```
-
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -136,32 +94,3 @@ export MEILI_MASTER_KEY="your-key"
 # Run the server
 ./target/release/fulla-server
 ```
-
-## How It Works
-
-### Package Analysis
-
-When a package is published:
-
-1. The package is extracted to a temporary directory
-2. **`dart pub get`** is run to fetch dependencies (required for proper analysis)
-3. If pana is installed, package analysis is performed
-4. If dartdoc is installed, documentation is generated
-5. Results are indexed in Meilisearch for search
-6. Temporary files are cleaned up
-
-If pana or dartdoc are not installed, the server gracefully skips those steps and continues with package indexing.
-
-## CI/CD
-
-The project uses GitHub Actions for automated builds:
-
-- **Triggers**: Pushes to `main`, version tags (`v*`), pull requests
-- **Platforms**: linux/amd64, linux/arm64
-- **Outputs**: Images pushed to GHCR with multiple tags
-
-See [`.github/workflows/docker-build.yml`](.github/workflows/docker-build.yml) for details.
-
-## License
-
-[Your License Here]
