@@ -1,4 +1,5 @@
 use crate::handlers::ApiError;
+use crate::handlers::auth::validate_user_auth;
 use crate::storage;
 use crate::{AppState, utils::get_base_url};
 use axum::{
@@ -8,40 +9,15 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use jsonwebtoken::{DecodingKey, Validation, decode};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    sub: String, // user_id
-    exp: usize,
-    admin: bool,
-}
 
 pub async fn upload_avatar(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> Result<Json<AvatarUploadResponse>, ApiError> {
-    // Validate JWT token
-    let token = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.strip_prefix("Bearer "))
-        .ok_or_else(|| {
-            ApiError::Unauthorized("Missing or invalid authorization header".to_string())
-        })?;
-
-    let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default(),
-    )
-    .map_err(|_| ApiError::Unauthorized("Invalid token".to_string()))?;
-
-    let user_id = token_data.claims.sub;
+    let user = validate_user_auth(&headers, &state.db).await?;
+    let user_id = user.id.to_string();
 
     let mut image_data = None;
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -105,7 +81,7 @@ pub async fn upload_avatar(
 
     sqlx::query("UPDATE users SET avatar_url = $1 WHERE id = $2")
         .bind(&avatar_url)
-        .bind(uuid::Uuid::parse_str(&user_id).map_err(|e| ApiError::Internal(e.to_string()))?)
+        .bind(user.id)
         .execute(&state.db)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
