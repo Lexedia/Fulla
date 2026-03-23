@@ -1,0 +1,107 @@
+services:
+  traefik:
+    image: traefik:v3.6.8
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"
+      - "8080:8080" # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: fulla
+      POSTGRES_PASSWORD: fulla_password
+      POSTGRES_DB: fulla
+    expose:
+      - "5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql
+
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    environment:
+      MEILI_MASTER_KEY: <meilisearch-master-key>
+      MEILI_NO_ANALYTICS: true
+      MEILI_ENV: production
+    ports:
+      - "7700:7700"
+    volumes:
+      - ./data/meili:/meili_data
+
+  fulla-backend:
+    image: ghcr.io/lexedia/fulla-backend:latest-full
+    environment:
+      # The base url of the application, this url will be used for public links to distribute packages and serve documentation etc.
+      BASE_URL: http://localhost:80
+
+      # Enable or disable registration, if disabled, you can only create accounts via the admin panel.
+      # Run this container locally first, because the first user will be created as an admin.
+      ENABLE_REGISTRATION: "true"
+      DATABASE_URL: postgres://fulla:fulla_password@postgres:5432/fulla
+      MEILI_URL: http://meilisearch:7700
+      MEILI_MASTER_KEY: <meilisearch-master-key>
+      # The max upload size for a package, if you ever change this, update your reverse proxy as well (in this case traefik).
+      MAX_UPLOAD_SIZE: 100 MiB
+      STORAGE_BACKEND: filesystem # Or s3
+      # If you use s3, you need to add a s3 compatible storage service and uncomment the following lines
+      # S3_BUCKET: pub-packages
+      # S3_REGION: auto
+      # S3_ENDPOINT: http://<s3-service-name>
+      # AWS_ACCESS_KEY_ID: <access-key-id>
+      # AWS_SECRET_ACCESS_KEY: <secret-access-key>
+      STORAGE_PATH: /app/storage
+      # The max number of documentation versions to keep per package i.e if a package has 10 versions, only the last 5 will be kept
+      # Use the minimal image if you don't plan on using documentation and package analysis.
+      MAX_DOC_VERSIONS: 5
+    expose:
+      - "3000"
+    volumes:
+      - ./data/backend:/app/storage
+    depends_on:
+      - postgres
+      - meilisearch
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      # API routes
+      - "traefik.http.routers.backend-api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.backend-api.entrypoints=web"
+      - "traefik.http.routers.backend-api.priority=100"
+      - "traefik.http.routers.backend-api.service=backend"
+      # Documentation routes
+      - "traefik.http.routers.backend-docs.rule=PathPrefix(`/documentation`)"
+      - "traefik.http.routers.backend-docs.entrypoints=web"
+      - "traefik.http.routers.backend-docs.priority=100"
+      - "traefik.http.routers.backend-docs.service=backend"
+      # Avatar routes
+      - "traefik.http.routers.backend-avatar.rule=PathPrefix(`/_avatars`)"
+      - "traefik.http.routers.backend-avatar.entrypoints=web"
+      - "traefik.http.routers.backend-avatar.priority=100"
+      - "traefik.http.routers.backend-avatar.service=backend"
+      # Package download routes
+      - "traefik.http.routers.backend-packages.rule=PathRegexp(`^/packages/[^/]+/versions/.*`)"
+      - "traefik.http.routers.backend-packages.entrypoints=web"
+      - "traefik.http.routers.backend-packages.priority=100"
+      - "traefik.http.routers.backend-packages.service=backend"
+      # Backend service
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+
+  fulla-frontend:
+    image: ghcr.io/lexedia/fulla-frontend:latest
+    expose:
+      - "80"
+    depends_on:
+      - traefik
+      - fulla-backend
+    labels:
+      - "traefik.enable=true"
+      # Frontend routes (catch-all, lower priority)
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"

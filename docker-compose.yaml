@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: fulla
+      POSTGRES_PASSWORD: fulla_password
+      POSTGRES_DB: fulla
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data4/postgres:/var/lib/postgresql
+
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    profiles: [ search ]
+    environment:
+      MEILI_MASTER_KEY: GAqdihKE_ricdh8heeX0dy4-PBFxSBCbC-Xjb_v7wwc
+      MEILI_NO_ANALYTICS: true
+      MEILI_ENV: production
+    ports:
+      - "7700:7700"
+    volumes:
+      - ./data4/meili:/meili_data
