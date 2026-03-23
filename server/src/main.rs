@@ -112,7 +112,7 @@ async fn main() {
             let aws_config = config_loader.load().await;
 
             let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
-                .force_path_style(true) // Required for MinIO and some S3-compatible services
+                .force_path_style(true)
                 .build();
             let s3_client = aws_sdk_s3::Client::from_conf(s3_config);
 
