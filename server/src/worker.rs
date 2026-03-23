@@ -15,7 +15,6 @@ pub async fn spawn_analysis(state: Arc<AppState>, package_name: String, version:
 async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> anyhow::Result<()> {
     info!("Starting analysis for {} v{}", name, version);
 
-    // Retrieve package data using storage abstraction
     let data = state.storage.get_package_data(&name, &version).await?;
 
     let extract_path = std::env::temp_dir().join(format!("fulla-ana-{}-{}", name, version));
@@ -24,14 +23,25 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
     }
     std::fs::create_dir_all(&extract_path)?;
 
-    // Extract tarball
     let gz = flate2::read::GzDecoder::new(&data[..]);
     let mut archive = tar::Archive::new(gz);
     archive.set_overwrite(false);
     archive.set_unpack_xattrs(false);
-    archive.unpack(&extract_path)?;
+    let canonical_extract = extract_path.canonicalize()?;
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?;
+        let dest = canonical_extract.join(&path);
+        // Resolve the full destination and ensure it stays within extract_path
+        if let Ok(resolved) = dest.canonicalize() {
+            if !resolved.starts_with(&canonical_extract) {
+                error!("Path traversal detected in archive: {:?}", path);
+                continue;
+            }
+        }
+        entry.unpack_in(&canonical_extract)?;
+    }
 
-    // Get version ID and pubspec
     let (version_id, pubspec): (Uuid, serde_json::Value) = sqlx::query_as(
         "SELECT v.id, v.pubspec FROM package_versions v JOIN packages p ON v.package_id = p.id WHERE p.name = $1 AND v.version = $2"
     )
@@ -40,7 +50,6 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
     .fetch_one(&state.db)
     .await?;
 
-    // Look for README
     let mut readme_content = None;
     for entry in std::fs::read_dir(&extract_path)? {
         let entry = entry?;
@@ -71,7 +80,6 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
         .and_then(|d| d.as_str())
         .map(|s| s.to_string());
 
-    // Get owner information and discontinuation status
     let (owner_username, owner_avatar, is_discontinued, replaced_by): (
         Option<String>,
         Option<String>,
@@ -107,7 +115,6 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
             .await;
     }
 
-    // Run dart pub get to fetch dependencies before analysis
     info!("Running dart pub get for {} v{}", name, version);
     let pub_get = Command::new("dart")
         .arg("pub")
@@ -136,7 +143,6 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
         }
     }
 
-    // Run pana analysis if available
     let pana_output = Command::new("pana")
         .arg("--json")
         .current_dir(&extract_path)
@@ -150,7 +156,6 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
 
                 let score = report["scores"]["grantedPoints"].as_i64().unwrap_or(0);
 
-                // Extract platforms from tags: "platform:android", "platform:ios", etc.
                 let platforms: Vec<String> = report["tags"]
                     .as_array()
                     .map(|tags| {
@@ -176,7 +181,6 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
                     name, version, score, platforms
                 );
 
-                // Update Meilisearch with score and platforms
                 if let Some(search) = &state.search {
                     let _ = search
                         .index("packages")
@@ -208,17 +212,15 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
             }
         }
         Err(e) => {
+            // wonder if that should actually be at a debug and not info
             info!("Pana not available (skipping analysis): {}", e);
-            // Don't fail the whole function if Pana is missing, we still indexed it above.
         }
     }
 
-    // Generate docs
     if let Err(e) = generate_docs(&state, &name, &version, &extract_path).await {
         error!("Failed to generate docs for {} v{}: {}", name, version, e);
     }
 
-    // Cleanup
     let _ = std::fs::remove_dir_all(&extract_path);
 
     Ok(())
@@ -232,7 +234,6 @@ async fn generate_docs(
 ) -> anyhow::Result<()> {
     info!("Generating documentation for {} v{}", name, version);
 
-    // Run dartdoc
     let output = match Command::new("dartdoc")
         .current_dir(extract_path)
         .output()
@@ -256,7 +257,6 @@ async fn generate_docs(
         return Ok(());
     }
 
-    // Determine storage path (default to ./storage/docs)
     let storage_path = std::env::var("STORAGE_PATH").unwrap_or_else(|_| "storage".to_string());
     let docs_base = std::path::Path::new(&storage_path).join("docs").join(name);
     let docs_dir = docs_base.join(version);
@@ -272,7 +272,6 @@ async fn generate_docs(
         return Ok(());
     }
 
-    // Copy contents of api_dir to docs_dir
     let status = Command::new("cp")
         .arg("-r")
         .arg(".")
@@ -286,7 +285,6 @@ async fn generate_docs(
         return Err(anyhow::anyhow!("Failed to copy docs"));
     }
 
-    // Pruning
     if let Err(e) = prune_old_docs(&storage_path, name).await {
         error!("Failed to prune old docs: {}", e);
     }
@@ -317,7 +315,6 @@ async fn prune_old_docs(storage_path: &str, name: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Sort descending
     versions.sort_by(|a, b| b.0.cmp(&a.0));
 
     if versions.len() > max_versions {

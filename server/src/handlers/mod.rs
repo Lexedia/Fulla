@@ -47,7 +47,8 @@ impl IntoResponse for ApiError {
             },
         });
         let mut response = if include_auth {
-            let www_auth = format!("Bearer realm=\"pub\", message=\"{}\"", body.error.message);
+            let sanitized_msg = body.error.message.replace('\\', "\\\\").replace('"', "\\\"");
+            let www_auth = format!("Bearer realm=\"pub\", message=\"{}\"", sanitized_msg);
             (status, [(header::WWW_AUTHENTICATE, www_auth)], body).into_response()
         } else {
             (status, body).into_response()

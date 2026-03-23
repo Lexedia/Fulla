@@ -9,6 +9,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub async fn upload_avatar(
