@@ -148,6 +148,8 @@ pub async fn create_user(
         ));
     }
 
+    crate::utils::validate_username(&payload.username)?;
+
     let exists = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE username = $1")
         .bind(&payload.username)
         .fetch_one(&state.db)
