@@ -109,6 +109,8 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
                     "updated_at": chrono::Utc::now(),
                     "owner_username": owner_username,
                     "owner_avatar": owner_avatar,
+                    "download_count": 0i64,
+                    "like_count": 0i64,
                 })],
                 Some("id"),
             )
@@ -154,7 +156,9 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
             if output.status.success() {
                 let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
 
-                let score = report["scores"]["grantedPoints"].as_i64().unwrap_or(0);
+                let score = report["scores"]["grantedPoints"]
+                    .as_i64()
+                    .unwrap_or_default();
 
                 let platforms: Vec<String> = report["tags"]
                     .as_array()
@@ -197,6 +201,16 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
                                 "updated_at": chrono::Utc::now(),
                                 "owner_username": owner_username,
                                 "owner_avatar": owner_avatar,
+                                "download_count": sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM downloads d INNER JOIN package_versions pv ON d.package_version_id = pv.id WHERE pv.package_id = (SELECT id FROM packages WHERE name = $1)")
+                                    .bind(&name)
+                                    .fetch_one(&state.db)
+                                    .await
+                                    .unwrap_or_default(),
+                                "like_count": sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM package_likes WHERE package_id = (SELECT id FROM packages WHERE name = $1)")
+                                    .bind(&name)
+                                    .fetch_one(&state.db)
+                                    .await
+                                    .unwrap_or_default(),
                             })],
                             Some("id"),
                         )

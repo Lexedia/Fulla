@@ -25,7 +25,7 @@ pub async fn redirect_to_latest(
     .bind(&name)
     .fetch_optional(&state.db)
     .await
-    .unwrap_or(None);
+    .unwrap_or_default();
 
     match latest_version {
         Some(version) => Redirect::to(&format!("/documentation/{}/{}/index.html", name, version)),

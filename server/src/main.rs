@@ -221,6 +221,10 @@ async fn main() {
                 .patch(handlers::packages::discontinue_package),
         )
         .route(
+            "/api/packages/{package}/like",
+            post(handlers::packages::like_package).delete(handlers::packages::unlike_package),
+        )
+        .route(
             "/api/packages/{package}/advisories",
             get(handlers::packages::list_package_advisories),
         )

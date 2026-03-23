@@ -23,6 +23,8 @@ pub struct PackageVersionsResponse {
     pub replaced_by: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "advisoriesUpdated")]
     pub advisories_updated: Option<DateTime<Utc>>,
+    pub download_count: i64,
+    pub like_count: i64,
     pub latest: PackageVersion,
     pub versions: Vec<PackageVersion>,
 }
@@ -152,6 +154,8 @@ pub struct SearchPackage {
     pub version: String,
     pub description: Option<String>,
     pub score: Option<i64>,
+    pub download_count: i64,
+    pub like_count: i64,
     pub updated_at: DateTime<Utc>,
     pub is_discontinued: bool,
     pub owner_username: Option<String>,
@@ -174,6 +178,9 @@ pub struct FrontendPackageDetail {
     pub readme: Option<String>,
     pub analysis: Option<serde_json::Value>,
     pub owner_username: Option<String>,
+    pub download_count: i64,
+    pub like_count: i64,
+    pub is_liked: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -63,11 +63,28 @@ pub async fn list_package_versions(
             created_at: Some(v.created_at),
         })
         .collect();
+    let download_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM downloads d INNER JOIN package_versions pv ON d.package_version_id = pv.id WHERE pv.package_id = $1"
+    )
+    .bind(pkg.id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let like_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM package_likes WHERE package_id = $1")
+            .bind(pkg.id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     Ok(Json(PackageVersionsResponse {
         name: pkg.name,
         is_discontinued: pkg.is_discontinued,
         replaced_by: pkg.replaced_by,
         advisories_updated: None, // TODO: Implement advisories
+        download_count,
+        like_count,
         latest,
         versions: all_versions,
     }))
@@ -118,6 +135,7 @@ pub async fn list_package_versions_tidy(
 }
 
 pub async fn get_package_details(
+    headers: HeaderMap,
     Path((package_name, version)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<crate::models::FrontendPackageDetail>, ApiError> {
@@ -133,7 +151,7 @@ pub async fn get_package_details(
                 format!("Package {} not found", package_name),
             )
         })?;
-    // Fetch owner username if owner_id is set
+
     let owner_username = if let Some(owner_id) = pkg.owner_id {
         sqlx::query_scalar::<_, String>("SELECT username FROM users WHERE id = $1")
             .bind(owner_id)
@@ -143,8 +161,7 @@ pub async fn get_package_details(
     } else {
         None
     };
-    // 2. Fetch Version
-    // If version is "latest", find the latest version
+
     let version_query = if version == "latest" {
         "SELECT * FROM package_versions WHERE package_id = $1 ORDER BY created_at DESC LIMIT 1"
     } else {
@@ -167,7 +184,6 @@ pub async fn get_package_details(
                 format!("Version {} not found", version),
             )
         })?;
-    // 3. Fetch Analysis
     let analysis_record: Option<(serde_json::Value,)> = sqlx::query_as(
         "SELECT report FROM analysis_results WHERE package_version_id = $1 ORDER BY created_at DESC LIMIT 1"
     )
@@ -175,8 +191,6 @@ pub async fn get_package_details(
     .fetch_optional(&state.db)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
-    // 4. Fetch Readme
-    // Readme is now in package_versions table
     let readme = match sqlx::query_scalar::<_, Option<String>>(
         "SELECT readme FROM package_versions WHERE id = $1",
     )
@@ -187,6 +201,34 @@ pub async fn get_package_details(
         Ok(Some(r)) => r,
         _ => None,
     };
+    let download_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM downloads d INNER JOIN package_versions pv ON d.package_version_id = pv.id WHERE pv.package_id = $1"
+    )
+    .bind(pkg.id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let like_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM package_likes WHERE package_id = $1")
+            .bind(pkg.id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let is_liked = if let Ok(user) = validate_user_auth(&headers, &state.db).await {
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM package_likes WHERE package_id = $1 AND user_id = $2)",
+        )
+        .bind(pkg.id)
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or_default()
+    } else {
+        false
+    };
+
     Ok(Json(crate::models::FrontendPackageDetail {
         package: pkg,
         version: PackageVersion {
@@ -200,6 +242,9 @@ pub async fn get_package_details(
         readme,
         analysis: analysis_record.map(|r| r.0),
         owner_username,
+        download_count,
+        like_count,
+        is_liked,
     }))
 }
 
@@ -251,8 +296,8 @@ pub async fn download_package(
         .strip_prefix(&format!("{}-", name))
         .unwrap_or(version);
 
-    let _exists = sqlx::query_scalar::<_, i32>(
-        "SELECT 1 FROM package_versions pv
+    let version_id = sqlx::query_scalar::<_, uuid::Uuid>(
+        "SELECT pv.id FROM package_versions pv
          INNER JOIN packages p ON p.id = pv.package_id
          WHERE p.name = $1 AND pv.version = $2",
     )
@@ -267,6 +312,16 @@ pub async fn download_package(
             format!("Package {} version {} not found", name, version),
         )
     })?;
+
+    // Record download asynchronously - ignoring failure
+    let db_clone = state.db.clone();
+    tokio::spawn(async move {
+        let _ = sqlx::query("INSERT INTO downloads (package_version_id) VALUES ($1)")
+            .bind(version_id)
+            .execute(&db_clone)
+            .await;
+    });
+
     // Use storage abstraction to determine how to retrieve the package
     match state
         .storage
@@ -436,4 +491,64 @@ pub async fn discontinue_package(
     }
 
     Ok(Json(updated_pkg))
+}
+
+pub async fn like_package(
+    headers: HeaderMap,
+    Path(package_name): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, ApiError> {
+    let user = validate_user_auth(&headers, &state.db).await?;
+
+    let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
+        .bind(&package_name)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| {
+            ApiError::NotFound(
+                "PackageNotFound".to_string(),
+                format!("Package {} not found", package_name),
+            )
+        })?;
+
+    sqlx::query(
+        "INSERT INTO package_likes (package_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(pkg.id)
+    .bind(user.id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn unlike_package(
+    headers: HeaderMap,
+    Path(package_name): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, ApiError> {
+    let user = validate_user_auth(&headers, &state.db).await?;
+
+    let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
+        .bind(&package_name)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| {
+            ApiError::NotFound(
+                "PackageNotFound".to_string(),
+                format!("Package {} not found", package_name),
+            )
+        })?;
+
+    sqlx::query("DELETE FROM package_likes WHERE package_id = $1 AND user_id = $2")
+        .bind(pkg.id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(StatusCode::OK)
 }

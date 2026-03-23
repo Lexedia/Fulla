@@ -95,7 +95,7 @@ pub async fn search_packages(
                     is_discontinued: result
                         .get("is_discontinued")
                         .and_then(|s| s.as_bool())
-                        .unwrap_or(false),
+                        .unwrap_or_default(),
                     owner_username: result
                         .get("owner_username")
                         .and_then(|s| s.as_str())
@@ -104,6 +104,14 @@ pub async fn search_packages(
                         .get("owner_avatar")
                         .and_then(|s| s.as_str())
                         .map(|s| s.to_string()),
+                    like_count: result
+                        .get("like_count")
+                        .and_then(|s| s.as_i64())
+                        .unwrap_or_default(),
+                    download_count: result
+                        .get("download_count")
+                        .and_then(|s| s.as_i64())
+                        .unwrap_or_default(),
                     platforms: result
                         .get("platforms")
                         .and_then(|p| p.as_array())
@@ -119,7 +127,7 @@ pub async fn search_packages(
 
         Ok(Json(SearchResult {
             packages,
-            total_hits: results.estimated_total_hits.unwrap_or(0) as i64,
+            total_hits: results.estimated_total_hits.unwrap_or_default() as i64,
         }))
     } else {
         let pattern = format!("%{}%", q);
@@ -144,7 +152,9 @@ pub async fn search_packages(
                 p.updated_at,
                 p.is_discontinued,
                 u.username AS owner_username,
-                u.avatar_url AS owner_avatar
+                u.avatar_url AS owner_avatar,
+                (SELECT COUNT(*) FROM downloads d INNER JOIN package_versions pv2 ON d.package_version_id = pv2.id WHERE pv2.package_id = p.id) AS download_count,
+                (SELECT COUNT(*) FROM package_likes WHERE package_id = p.id) AS like_count
             FROM packages p
             JOIN package_versions pv ON pv.package_id = p.id
             LEFT JOIN analysis_results ar ON ar.package_version_id = pv.id
@@ -174,6 +184,8 @@ pub async fn search_packages(
             bool,
             Option<String>,
             Option<String>,
+            i64,
+            i64,
         )> = sqlx::query_as(&sql)
             .bind(&pattern)
             .bind(limit as i64)
@@ -188,7 +200,7 @@ pub async fn search_packages(
             .bind(&owner)
             .fetch_one(&state.db)
             .await
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let packages = rows
             .into_iter()
@@ -202,12 +214,16 @@ pub async fn search_packages(
                     is_discontinued,
                     owner_username,
                     owner_avatar,
+                    download_count,
+                    like_count,
                 )| {
                     SearchPackage {
                         package: name,
                         version,
                         description,
                         score: score.map(|s| s as i64),
+                        download_count,
+                        like_count,
                         updated_at,
                         is_discontinued,
                         owner_username,
