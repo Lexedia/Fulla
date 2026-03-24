@@ -1,6 +1,7 @@
 import { For, Show, type Component } from 'solid-js';
 import { type SearchPackage } from '../types/types';
 import { timeAgo } from '../utils/utils';
+import { Heart, Download } from 'lucide-solid';
 
 
 interface Props {
@@ -27,16 +28,23 @@ const PackageCard: Component<Props> = (props) => {
                         v{props.package.version} • Updated {timeAgo(props.package.updated_at)}
                     </p>
                 </div>
-                <div class="flex flex-col items-end">
-                    <div class={`flex flex-col items-end gap-2`}>
-                        <Show when={props.package.score !== undefined}>
-                            <div class={`flex items-center space-x-1 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded text-xs font-medium text-blue-700 dark:text-blue-300 ${props.package.is_discontinued ? 'mt-8' : ''}`}>
-                                <span>{props.package.score}</span>
-                                <span>points</span>
-                            </div>
-                            {/* <ScoreBar score={props.package.score!} max={160} label="Score" /> */}
-                        </Show>
+                <div class="flex flex-col items-end gap-2">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                            <Download size={14} class="text-gray-400" />
+                            <span>{props.package.download_count}</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                            <Heart size={14} class="text-gray-400" />
+                            <span>{props.package.like_count}</span>
+                        </div>
                     </div>
+                    <Show when={props.package.score !== undefined}>
+                        <div class={`flex items-center space-x-1 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded text-xs font-medium text-blue-700 dark:text-blue-300 ${props.package.is_discontinued ? 'mt-4' : ''}`}>
+                            <span>{props.package.score}</span>
+                            <span>points</span>
+                        </div>
+                    </Show>
                 </div>
             </div>
             <p class="mt-3 text-gray-600 dark:text-gray-300 text-sm line-clamp-2">

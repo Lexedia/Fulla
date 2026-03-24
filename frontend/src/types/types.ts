@@ -18,6 +18,8 @@ export interface Package {
     advisories_updated: string;
     owner_username?: string;
     owner_avatar?: string;
+    download_count: number;
+    like_count: number;
 }
 
 export interface PackageVersion {
@@ -38,6 +40,8 @@ export interface SearchPackage {
     is_discontinued?: boolean;
     owner_username?: string;
     owner_avatar?: string;
+    download_count: number;
+    like_count: number;
     platforms: string[];
 }
 
@@ -51,6 +55,9 @@ export interface PackageDetail {
     readme?: string;
     analysis?: any;
     owner_username?: string;
+    download_count: number;
+    like_count: number;
+    is_liked: boolean;
 }
 
 export interface DBPackage {

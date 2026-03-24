@@ -31,9 +31,8 @@ export default function ({ pkg, onClick }: { pkg: Package, onClick: () => void }
                     </div>
 
                     <div class="hidden sm:flex flex-col gap-3 ml-4 border-l border-gray-100 dark:border-slate-700 pl-4">
-                        <ScoreBar score={6265} max={10000} label="Likes" />
-                        <ScoreBar score={120} max={140} label="Pub Points" />
-                        <ScoreBar score={98} max={100} label="Popularity" />
+                        <ScoreBar score={pkg.like_count} max={100} label="Likes" />
+                        <ScoreBar score={pkg.download_count} max={1000} label="Downloads" />
                     </div>
                 </div>
 

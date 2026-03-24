@@ -141,7 +141,27 @@ export async function discontinuePackage(name: string, replacedBy?: string): Pro
     }
 }
 
-// Admin API
+export async function likePackage(name: string): Promise<void> {
+    const response = await authenticatedFetch(`${API_BASE}/packages/${name}/like`, {
+        method: 'POST',
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'Failed to like package');
+    }
+}
+
+export async function unlikePackage(name: string): Promise<void> {
+    const response = await authenticatedFetch(`${API_BASE}/packages/${name}/like`, {
+        method: 'DELETE',
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'Failed to unlike package');
+    }
+}
 
 export interface AdminStats {
     users: number;

@@ -1,12 +1,12 @@
 import { type Component, createResource, Show, createSignal, For, Switch, Match } from 'solid-js';
 import { A, useParams } from '@solidjs/router';
-import { getPackageDetails, getPackageVersions, discontinuePackage, searchPackages } from '../api';
+import { getPackageDetails, getPackageVersions, discontinuePackage, searchPackages, likePackage, unlikePackage } from '../api';
 import PanaAnalysis from '../components/PanaAnalysis';
 import { renderMarkdown } from '../utils/markdown';
 import { useAuth } from '../auth';
 import type { SearchPackage } from '../types/types';
 import { timeAgo } from '../utils/utils';
-import { Download, BookOpen, User, CircleXIcon } from 'lucide-solid'
+import { Download, BookOpen, User, CircleXIcon, Heart } from 'lucide-solid'
 
 enum Tab {
     Readme = 'Readme',
@@ -25,9 +25,29 @@ const PackageDetail: Component = () => {
     const [isDiscontinuing, setIsDiscontinuing] = createSignal(false);
     const [suggestions, setSuggestions] = createSignal<SearchPackage[]>([]);
     const [isSearchingSuggestions, setIsSearchingSuggestions] = createSignal(false);
+    const [isLiking, setIsLiking] = createSignal(false);
 
-    const [detail] = createResource(() => params.name, (name) => getPackageDetails(name));
+
+    const [detail, { mutate: mutateDetail }] = createResource(() => params.name, (name) => getPackageDetails(name));
     const [versions] = createResource(() => params.name, (name) => getPackageVersions(name));
+
+    const handleLike = async () => {
+        if (!user()) return;
+        setIsLiking(true);
+        try {
+            if (detail()?.is_liked) {
+                await unlikePackage(params.name!);
+                mutateDetail(prev => prev ? { ...prev, is_liked: false, like_count: prev.like_count - 1 } : undefined);
+            } else {
+                await likePackage(params.name!);
+                mutateDetail(prev => prev ? { ...prev, is_liked: true, like_count: prev.like_count + 1 } : undefined);
+            }
+        } catch (err) {
+            console.error("Failed to update like status", err);
+        } finally {
+            setIsLiking(false);
+        }
+    };
 
     const handleDiscontinue = async (e: Event) => {
         e.preventDefault();
@@ -101,10 +121,29 @@ const PackageDetail: Component = () => {
                                     <span>v{detail()?.version.version}</span>
                                     <span>•</span>
                                     <span>Published {timeAgo(detail()?.version.created_at)}</span>
+                                    <span>•</span>
+                                    <span class="flex items-center gap-1">
+                                        <Download size={14} />
+                                        {detail()?.download_count} total downloads
+                                    </span>
                                 </Show>
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
+                            <Show when={detail()}>
+                                <button
+                                    onClick={handleLike}
+                                    disabled={!user() || isLiking()}
+                                    class={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all font-medium ${detail()?.is_liked
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'
+                                        : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
+                                        } ${!user() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    title={user() ? (detail()?.is_liked ? 'Unlike' : 'Like') : 'Login to like'}
+                                >
+                                    <Heart size={20} class={detail()?.is_liked ? 'fill-current' : ''} />
+                                    <span>{detail()?.like_count}</span>
+                                </button>
+                            </Show>
                             <a
                                 href={`/documentation/${params.name}`}
                                 target="_blank"
