@@ -1,7 +1,8 @@
 import { type Component, createResource, Show, createSignal, For, Switch, Match } from 'solid-js';
 import { A, useParams } from '@solidjs/router';
-import { getPackageDetails, getPackageVersions, discontinuePackage, searchPackages, likePackage, unlikePackage } from '../api';
+import { getPackageDetails, getPackageVersions, getPackageDownloads, discontinuePackage, searchPackages, likePackage, unlikePackage } from '../api';
 import PanaAnalysis from '../components/PanaAnalysis';
+import DownloadsChart from '../components/DownloadsChart';
 import { renderMarkdown } from '../utils/markdown';
 import { useAuth } from '../auth';
 import type { SearchPackage } from '../types/types';
@@ -12,6 +13,7 @@ enum Tab {
     Readme = 'Readme',
     Analysis = 'Analysis',
     Versions = 'Versions',
+    Stats = 'Stats',
 }
 
 const PackageDetail: Component = () => {
@@ -30,6 +32,11 @@ const PackageDetail: Component = () => {
 
     const [detail, { mutate: mutateDetail }] = createResource(() => params.name, (name) => getPackageDetails(name));
     const [versions] = createResource(() => params.name, (name) => getPackageVersions(name));
+    const [timeRange, setTimeRange] = createSignal('30d');
+    const [downloads] = createResource(
+        () => ({ name: params.name!, range: timeRange() }),
+        ({ name, range }) => getPackageDownloads(name, range)
+    );
 
     const handleLike = async () => {
         if (!user()) return;
@@ -84,7 +91,6 @@ const PackageDetail: Component = () => {
         }
     };
 
-    // Handle async markdown rendering
     const [readmeHtml] = createResource(() => detail()?.readme, (readme) => {
         if (!readme) return Promise.resolve('');
         return renderMarkdown(readme);
@@ -279,6 +285,27 @@ const PackageDetail: Component = () => {
                                                 </table>
                                             </div>
                                         </div>
+                                    </Show>
+                                </Show>
+                            </Match>
+                            <Match when={activeTab() === Tab.Stats}>
+                                <div class="flex justify-end mb-6">
+                                    <select 
+                                        value={timeRange()} 
+                                        onChange={(e) => setTimeRange(e.currentTarget.value)}
+                                        class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg text-sm font-medium focus:ring-primary-500 focus:border-primary-500 cursor-pointer text-gray-700 dark:text-gray-200"
+                                    >
+                                        <option value="30d">Last 30 Days</option>
+                                        <option value="90d">Last 90 Days</option>
+                                        <option value="all">All Time</option>
+                                    </select>
+                                </div>
+                                <Show when={!downloads.loading} fallback={<div class="flex justify-center p-12"><span class="loading loading-spinner text-primary-600"></span></div>}>
+                                    <Show when={downloads()?.data && downloads()!.data.length > 0} fallback={<div class="text-center py-12 text-gray-500">No time-series version data available to display chart.</div>}>
+                                        <DownloadsChart 
+                                            versions={versions() || []}
+                                            downloads={downloads()!.data}
+                                        />
                                     </Show>
                                 </Show>
                             </Match>

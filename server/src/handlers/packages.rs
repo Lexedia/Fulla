@@ -9,10 +9,12 @@ use crate::storage;
 use axum::{
     Json,
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub async fn list_package_versions(
@@ -43,6 +45,18 @@ pub async fn list_package_versions(
             format!("No versions found for package {}", package_name),
         ));
     }
+    let mut version_downloads: HashMap<uuid::Uuid, i64> = HashMap::new();
+    if let Ok(records) = sqlx::query!(
+        "SELECT package_version_id, COUNT(*) as count FROM downloads d INNER JOIN package_versions pv ON d.package_version_id = pv.id WHERE pv.package_id = $1 GROUP BY package_version_id",
+        pkg.id
+    )
+    .fetch_all(&state.db)
+    .await {
+        for r in records {
+            version_downloads.insert(r.package_version_id, r.count.unwrap_or(0));
+        }
+    }
+
     let latest_db = &versions[0];
     let latest = PackageVersion {
         version: latest_db.version.clone(),
@@ -51,16 +65,21 @@ pub async fn list_package_versions(
         pubspec: latest_db.pubspec.clone(),
         retracted: latest_db.retracted,
         created_at: Some(latest_db.created_at),
+        download_count: version_downloads.get(&latest_db.id).copied().unwrap_or(0),
     };
     let all_versions = versions
         .into_iter()
-        .map(|v| PackageVersion {
-            version: v.version,
-            archive_url: v.archive_url,
-            archive_sha256: v.archive_sha256,
-            pubspec: v.pubspec,
-            retracted: v.retracted,
-            created_at: Some(v.created_at),
+        .map(|v| {
+            let dc = version_downloads.get(&v.id).copied().unwrap_or(0);
+            PackageVersion {
+                version: v.version,
+                archive_url: v.archive_url,
+                archive_sha256: v.archive_sha256,
+                pubspec: v.pubspec,
+                retracted: v.retracted,
+                created_at: Some(v.created_at),
+                download_count: dc,
+            }
         })
         .collect();
     let download_count = sqlx::query_scalar::<_, i64>(
@@ -119,15 +138,32 @@ pub async fn list_package_versions_tidy(
         ));
     }
 
+    let mut version_downloads: std::collections::HashMap<uuid::Uuid, i64> =
+        std::collections::HashMap::new();
+    if let Ok(records) = sqlx::query!(
+        "SELECT package_version_id, COUNT(*) as count FROM downloads d INNER JOIN package_versions pv ON d.package_version_id = pv.id WHERE pv.package_id = $1 GROUP BY package_version_id",
+        pkg.id
+    )
+    .fetch_all(&state.db)
+    .await {
+        for r in records {
+            version_downloads.insert(r.package_version_id, r.count.unwrap_or(0));
+        }
+    }
+
     let all_versions = versions
         .into_iter()
-        .map(|v| PackageVersion {
-            version: v.version,
-            archive_url: v.archive_url,
-            archive_sha256: v.archive_sha256,
-            pubspec: v.pubspec,
-            retracted: v.retracted,
-            created_at: Some(v.created_at),
+        .map(|v| {
+            let dc = version_downloads.get(&v.id).copied().unwrap_or(0);
+            PackageVersion {
+                version: v.version,
+                archive_url: v.archive_url,
+                archive_sha256: v.archive_sha256,
+                pubspec: v.pubspec,
+                retracted: v.retracted,
+                created_at: Some(v.created_at),
+                download_count: dc,
+            }
         })
         .collect();
 
@@ -139,7 +175,6 @@ pub async fn get_package_details(
     Path((package_name, version)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<crate::models::FrontendPackageDetail>, ApiError> {
-    // 1. Fetch Package
     let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
         .bind(&package_name)
         .fetch_optional(&state.db)
@@ -229,6 +264,14 @@ pub async fn get_package_details(
         false
     };
 
+    let version_dl_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM downloads WHERE package_version_id = $1",
+    )
+    .bind(db_version.id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or_default();
+
     Ok(Json(crate::models::FrontendPackageDetail {
         package: pkg,
         version: PackageVersion {
@@ -238,6 +281,7 @@ pub async fn get_package_details(
             pubspec: db_version.pubspec,
             retracted: db_version.retracted,
             created_at: Some(db_version.created_at),
+            download_count: version_dl_count,
         },
         readme,
         analysis: analysis_record.map(|r| r.0),
@@ -277,6 +321,14 @@ pub async fn inspect_package_version(
             format!("Version {} of package {} not found", version, package_name),
         )
     })?;
+    let version_dl_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM downloads WHERE package_version_id = $1",
+    )
+    .bind(db_version.id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
     Ok(Json(PackageVersion {
         version: db_version.version,
         archive_url: db_version.archive_url,
@@ -284,6 +336,7 @@ pub async fn inspect_package_version(
         pubspec: db_version.pubspec,
         retracted: db_version.retracted,
         created_at: Some(db_version.created_at),
+        download_count: version_dl_count,
     }))
 }
 
@@ -313,7 +366,6 @@ pub async fn download_package(
         )
     })?;
 
-    // Record download asynchronously - ignoring failure
     let db_clone = state.db.clone();
     tokio::spawn(async move {
         let _ = sqlx::query("INSERT INTO downloads (package_version_id) VALUES ($1)")
@@ -322,23 +374,18 @@ pub async fn download_package(
             .await;
     });
 
-    // Use storage abstraction to determine how to retrieve the package
     match state
         .storage
         .get_download_url(&name, &version)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
     {
-        storage::PackageRetrieval::Redirect(url) => {
-            // For S3 (or remote), redirect to the presigned URL
-            Ok(Response::builder()
-                .status(StatusCode::FOUND)
-                .header(header::LOCATION, url)
-                .body(Body::empty())
-                .unwrap())
-        }
+        storage::PackageRetrieval::Redirect(url) => Ok(Response::builder()
+            .status(StatusCode::FOUND)
+            .header(header::LOCATION, url)
+            .body(Body::empty())
+            .unwrap()),
         storage::PackageRetrieval::File(path) => {
-            // For local file, serve it directly
             let file = tokio::fs::File::open(path)
                 .await
                 .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -361,7 +408,6 @@ pub async fn list_package_advisories(
     Path(package_name): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<AdvisoriesResponse>, ApiError> {
-    // Verify package exists
     let _pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
         .bind(&package_name)
         .fetch_optional(&state.db)
@@ -388,7 +434,6 @@ pub async fn discontinue_package(
 ) -> Result<Json<DBPackage>, ApiError> {
     let user = validate_user_auth(&headers, &state.db).await?;
 
-    // 1. Fetch Package
     let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
         .bind(&package_name)
         .fetch_optional(&state.db)
@@ -401,7 +446,6 @@ pub async fn discontinue_package(
             )
         })?;
 
-    // 2. Check Permissions (Owner or Admin)
     let is_owner = pkg.owner_id == Some(user.id);
     if !is_owner && !user.is_admin {
         return Err(ApiError::Forbidden(
@@ -410,7 +454,6 @@ pub async fn discontinue_package(
         ));
     }
 
-    // 3. Validate Replacement Package (if specified)
     if let Some(ref replaced_by) = payload.replaced_by {
         let replacement_exists = sqlx::query("SELECT 1 FROM packages WHERE name = $1")
             .bind(replaced_by)
@@ -427,7 +470,6 @@ pub async fn discontinue_package(
         }
     }
 
-    // 4. Update Package
     let updated_pkg = sqlx::query_as::<_, DBPackage>(
         "UPDATE packages SET is_discontinued = TRUE, replaced_by = $1, updated_at = NOW() WHERE id = $2 RETURNING *"
     )
@@ -437,8 +479,6 @@ pub async fn discontinue_package(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // 5. Update Search Index
-    // Fetch info needed for indexing (latest version info)
     let search_info: Option<(
         String,
         Option<String>,
@@ -551,4 +591,52 @@ pub async fn unlike_package(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(StatusCode::OK)
+}
+
+#[derive(Deserialize)]
+pub struct DownloadQuery {
+    pub range: Option<String>,
+}
+
+pub async fn get_package_downloads(
+    Path(package_name): Path<String>,
+    Query(query): Query<DownloadQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<crate::models::PackageDownloadsResponse>, ApiError> {
+    let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
+        .bind(&package_name)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| {
+            ApiError::NotFound(
+                "PackageNotFound".to_string(),
+                format!("Package {} not found", package_name),
+            )
+        })?;
+
+    let days = match query.range.as_deref() {
+        Some("30d") => 30,
+        Some("90d") => 90,
+        Some("all") => 36500, // effectively all
+        _ => 30,
+    };
+
+    let records = sqlx::query_as::<_, crate::models::DownloadSeriesRow>(
+        r#"
+        SELECT DATE_TRUNC('day', d.download_time) as date, pv.version, COUNT(*)::bigint as count
+        FROM downloads d
+        INNER JOIN package_versions pv ON d.package_version_id = pv.id
+        WHERE pv.package_id = $1 AND d.download_time > NOW() - INTERVAL '1 day' * $2
+        GROUP BY date, pv.version
+        ORDER BY date ASC
+        "#
+    )
+    .bind(pkg.id)
+    .bind(days as f64)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(crate::models::PackageDownloadsResponse { data: records }))
 }

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@dschz/solid-uplot':
+        specifier: ^0.5.2
+        version: 0.5.2(solid-js@1.9.11)(uplot@1.6.32)
       '@solidjs/router':
         specifier: ^0.15.4
         version: 0.15.4(solid-js@1.9.11)
@@ -23,6 +26,9 @@ importers:
       dompurify:
         specifier: ^3.3.1
         version: 3.3.1
+      es-toolkit:
+        specifier: ^1.45.1
+        version: 1.45.1
       lucide-solid:
         specifier: ^0.563.0
         version: 0.563.0(solid-js@1.9.11)
@@ -38,6 +44,9 @@ importers:
       temporal-polyfill:
         specifier: ^0.3.0
         version: 0.3.0
+      uplot:
+        specifier: ^1.6.32
+        version: 1.6.32
       vite-plugin-barrel:
         specifier: ^0.4.1
         version: 0.4.1(vite@7.3.1(@types/node@24.10.10)(jiti@2.6.1)(lightningcss@1.30.2))
@@ -156,6 +165,12 @@ packages:
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
+
+  '@dschz/solid-uplot@0.5.2':
+    resolution: {integrity: sha512-GjiY+3ruTYio8l02CUTmXmyOW8W6/R811eXMy3A8xHuNhPArLZZDg6mBb4V2pUzzUbVMeT9ykruOHql8jysmtQ==}
+    peerDependencies:
+      solid-js: '>=1.6.0'
+      uplot: '>=1.6.32'
 
   '@emnapi/core@1.8.1':
     resolution: {integrity: sha512-AvT9QFpxK0Zd8J0jopedNm+w/2fIzvtPKPjqyw9jwvBaReTTqPBk9Hixaz7KbjimP+QNz605/XnjFcDAL2pqBg==}
@@ -866,6 +881,9 @@ packages:
     resolution: {integrity: sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==}
     engines: {node: '>=0.12'}
 
+  es-toolkit@1.45.1:
+    resolution: {integrity: sha512-/jhoOj/Fx+A+IIyDNOvO3TItGmlMKhtX8ISAHKE90c4b/k1tqaqEZ+uUqfpU8DMnW5cgNJv606zS55jGvza0Xw==}
+
   esbuild@0.27.2:
     resolution: {integrity: sha512-HyNQImnsOC7X9PMNaCIeAm4ISCQXs5a5YasTXVliKv4uuBo1dKrG0A+uQS8M5eXjVMnLg3WgXaKvprHlFJQffw==}
     engines: {node: '>=18'}
@@ -1192,6 +1210,9 @@ packages:
     peerDependencies:
       browserslist: '>= 4.21.0'
 
+  uplot@1.6.32:
+    resolution: {integrity: sha512-KIMVnG68zvu5XXUbC4LQEPnhwOxBuLyW1AHtpm6IKTXImkbLgkMy+jabjLgSLMasNuGGzQm/ep3tOkyTxpiQIw==}
+
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
@@ -1390,6 +1411,11 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
+
+  '@dschz/solid-uplot@0.5.2(solid-js@1.9.11)(uplot@1.6.32)':
+    dependencies:
+      solid-js: 1.9.11
+      uplot: 1.6.32
 
   '@emnapi/core@1.8.1':
     dependencies:
@@ -1911,6 +1937,8 @@ snapshots:
 
   entities@6.0.1: {}
 
+  es-toolkit@1.45.1: {}
+
   esbuild@0.27.2:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.27.2
@@ -2271,6 +2299,8 @@ snapshots:
       browserslist: 4.28.1
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uplot@1.6.32: {}
 
   util-deprecate@1.0.2: {}
 

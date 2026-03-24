@@ -12,6 +12,8 @@ pub struct PackageVersion {
     #[serde(default)]
     pub retracted: bool,
     pub created_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub download_count: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -223,4 +225,16 @@ pub struct AdminUserResponse {
     pub is_admin: bool,
     pub avatar_url: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
+pub struct DownloadSeriesRow {
+    pub date: Option<DateTime<Utc>>,
+    pub version: String,
+    pub count: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageDownloadsResponse {
+    pub data: Vec<DownloadSeriesRow>,
 }

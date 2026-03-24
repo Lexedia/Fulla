@@ -29,6 +29,7 @@ export interface PackageVersion {
     pubspec: Pubspec;
     retracted: boolean;
     created_at: string;
+    download_count: number;
 }
 
 export interface SearchPackage {
@@ -68,4 +69,14 @@ export interface DBPackage {
     owner_id?: string;
     created_at: string;
     updated_at: string;
+}
+
+export interface DownloadSeriesRow {
+    date: string | null;
+    version: string;
+    count: number | null;
+}
+
+export interface PackageDownloadsResponse {
+    data: DownloadSeriesRow[];
 }

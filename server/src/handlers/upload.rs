@@ -72,7 +72,7 @@ pub async fn upload_package(
     };
 
     let finalize_url = format!("{}://{}/api/publish/finalize/{}", scheme, host, upload_id);
-    Ok((StatusCode::NO_CONTENT, [(header::LOCATION, finalize_url)]))
+    Ok((StatusCode::SEE_OTHER, [(header::LOCATION, finalize_url)]))
 }
 
 pub async fn finalize_publish(

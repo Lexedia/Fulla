@@ -243,6 +243,10 @@ async fn main() {
             get(handlers::packages::list_package_versions_tidy),
         )
         .route(
+            "/api/packages/{package}/downloads",
+            get(handlers::packages::get_package_downloads),
+        )
+        .route(
             "/api/packages/versions/new",
             get(handlers::upload::publish_new_version),
         )

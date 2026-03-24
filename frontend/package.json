@@ -9,16 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dschz/solid-uplot": "^0.5.2",
     "@solidjs/router": "^0.15.4",
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.18",
     "dompurify": "^3.3.1",
+    "es-toolkit": "^1.45.1",
     "lucide-solid": "^0.563.0",
     "marked": "^17.0.1",
     "shiki": "^3.22.0",
     "solid-js": "^1.9.10",
     "temporal-polyfill": "^0.3.0",
+    "uplot": "^1.6.32",
     "vite-plugin-barrel": "^0.4.1",
     "vite-plugin-lucide-preprocess": "^1.4.6"
   },

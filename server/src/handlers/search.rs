@@ -156,7 +156,13 @@ pub async fn search_packages(
                 (SELECT COUNT(*) FROM downloads d INNER JOIN package_versions pv2 ON d.package_version_id = pv2.id WHERE pv2.package_id = p.id) AS download_count,
                 (SELECT COUNT(*) FROM package_likes WHERE package_id = p.id) AS like_count
             FROM packages p
-            JOIN package_versions pv ON pv.package_id = p.id
+            CROSS JOIN LATERAL (
+                SELECT version, pubspec, id
+                FROM package_versions
+                WHERE package_id = p.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) pv
             LEFT JOIN analysis_results ar ON ar.package_version_id = pv.id
             LEFT JOIN users u ON u.id = p.owner_id
             WHERE (p.name ILIKE $1 OR pv.pubspec->>'description' ILIKE $1)
@@ -167,9 +173,15 @@ pub async fn search_packages(
         );
 
         let count_sql = r#"
-            SELECT COUNT(DISTINCT p.id)
+            SELECT COUNT(*)
             FROM packages p
-            JOIN package_versions pv ON pv.package_id = p.id
+            CROSS JOIN LATERAL (
+                SELECT pubspec
+                FROM package_versions
+                WHERE package_id = p.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) pv
             LEFT JOIN users u ON u.id = p.owner_id
             WHERE (p.name ILIKE $1 OR pv.pubspec->>'description' ILIKE $1)
               AND ($2::text IS NULL OR u.username = $2)

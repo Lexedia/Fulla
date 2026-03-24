@@ -1,4 +1,4 @@
-import type { SearchResult, PackageDetail } from "./types/types";
+import type { SearchResult, PackageDetail, PackageDownloadsResponse, PackageVersion } from "./types/types";
 import { authenticatedFetch } from "./auth";
 
 const API_BASE = '/api';
@@ -35,10 +35,18 @@ export async function getPackageDetails(name: string, version: string = 'latest'
     return response.json();
 }
 
-export async function getPackageVersions(name: string): Promise<import('./types/types').PackageVersion[]> {
+export async function getPackageVersions(name: string): Promise<PackageVersion[]> {
     const response = await fetch(`${API_BASE}/packages/${name}/versions`);
     if (!response.ok) {
         throw new Error('Failed to fetch package versions');
+    }
+    return response.json();
+}
+
+export async function getPackageDownloads(name: string, range: string = '30d'): Promise<PackageDownloadsResponse> {
+    const response = await fetch(`${API_BASE}/packages/${name}/downloads?range=${range}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch package downloads');
     }
     return response.json();
 }
