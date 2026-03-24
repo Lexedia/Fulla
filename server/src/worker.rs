@@ -19,9 +19,9 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
 
     let extract_path = std::env::temp_dir().join(format!("fulla-ana-{}-{}", name, version));
     if extract_path.exists() {
-        std::fs::remove_dir_all(&extract_path)?;
+        tokio::fs::remove_dir_all(&extract_path).await?;
     }
-    std::fs::create_dir_all(&extract_path)?;
+    tokio::fs::create_dir_all(&extract_path).await?;
 
     let gz = flate2::read::GzDecoder::new(&data[..]);
     let mut archive = tar::Archive::new(gz);
@@ -51,13 +51,13 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
     .await?;
 
     let mut readme_content = None;
-    for entry in std::fs::read_dir(&extract_path)? {
-        let entry = entry?;
+    let mut entries = tokio::fs::read_dir(&extract_path).await?;
+    while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if path.is_file() {
             if let Some(fname) = path.file_name().and_then(|s| s.to_str()) {
                 if fname.to_uppercase().starts_with("README") {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
+                    if let Ok(content) = tokio::fs::read_to_string(&path).await {
                         readme_content = Some(content);
                         break;
                     }
@@ -235,7 +235,7 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
         error!("Failed to generate docs for {} v{}: {}", name, version, e);
     }
 
-    let _ = std::fs::remove_dir_all(&extract_path);
+    tokio::fs::remove_dir_all(&extract_path).await?;
 
     Ok(())
 }

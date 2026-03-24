@@ -62,7 +62,9 @@ pub async fn upload_package(
     })?;
     let upload_id = Uuid::new_v4();
     let temp_path = std::env::temp_dir().join(format!("fulla-upload-{}-{}", upload_id, token.id));
-    std::fs::write(&temp_path, data).map_err(|e| ApiError::Internal(e.to_string()))?;
+    tokio::fs::write(&temp_path, data)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let (scheme, host) = match get_base_url() {
         Ok((s, h)) => (s, h),
@@ -86,7 +88,9 @@ pub async fn finalize_publish(
             "No uploaded file found for this ID".to_string(),
         ));
     }
-    let data = std::fs::read(&temp_path).map_err(|e| ApiError::Internal(e.to_string()))?;
+    let data = tokio::fs::read(&temp_path)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
     let gz = GzDecoder::new(&data[..]);
     let mut archive = Archive::new(gz);
     let mut pubspec_val = None;
@@ -138,7 +142,7 @@ pub async fn finalize_publish(
         .store_package(name, version, &data)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to store package: {}", e)))?;
-    let _ = std::fs::remove_file(&temp_path);
+    let _ = tokio::fs::remove_file(&temp_path).await;
 
     let (scheme, host) = get_base_url()?;
     let archive_url = format!(

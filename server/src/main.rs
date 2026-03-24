@@ -62,7 +62,9 @@ async fn main() {
         .expect("Failed to run migrations");
 
     let storage_path = std::env::var("STORAGE_PATH").unwrap_or_else(|_| "./storage".to_string());
-    std::fs::create_dir_all(&storage_path).expect("Failed to create storage directory");
+    tokio::fs::create_dir_all(&storage_path)
+        .await
+        .expect("Failed to create storage directory");
 
     let search = if let Ok(meili_url) = std::env::var("MEILI_URL") {
         let meili_key =
