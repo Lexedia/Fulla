@@ -28,7 +28,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
         const storedToken = localStorage.getItem("auth_token");
         const storedUser = localStorage.getItem("auth_user");
         if (storedToken && storedUser) {
-            // Validate the token with the server before trusting localStorage
             try {
                 const response = await fetch("/api/tokens", {
                     headers: { Authorization: `Bearer ${storedToken}` },
@@ -37,12 +36,10 @@ export function AuthProvider(props: { children: JSX.Element }) {
                     setToken(storedToken);
                     setUser(JSON.parse(storedUser));
                 } else {
-                    // Token is invalid/expired — clear stored auth
                     localStorage.removeItem("auth_token");
                     localStorage.removeItem("auth_user");
                 }
             } catch {
-                // Network error — use cached data but don't fully trust it
                 setToken(storedToken);
                 setUser(JSON.parse(storedUser));
             }

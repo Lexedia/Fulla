@@ -52,9 +52,27 @@ async fn main() {
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let pool = PgPool::connect(&database_url)
-        .await
-        .expect("Failed to connect to Postgres");
+    let mut retry_count = 0;
+    let max_retries = 10;
+    let pool = loop {
+        match PgPool::connect(&database_url).await {
+            Ok(pool) => break pool,
+            Err(e) => {
+                retry_count += 1;
+                if retry_count >= max_retries {
+                    tracing::error!("Failed to connect to Postgres after {} attempts: {}", max_retries, e);
+                    panic!("Failed to connect to Postgres: {}", e);
+                }
+                tracing::warn!(
+                    "Failed to connect to Postgres (attempt {}/{}): {}. Retrying in 2s...",
+                    retry_count,
+                    max_retries,
+                    e
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        }
+    };
 
     sqlx::migrate!("./migrations")
         .run(&pool)
