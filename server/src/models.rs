@@ -110,9 +110,136 @@ pub struct TokenResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AdvisoriesResponse {
-    pub advisories: Vec<serde_json::Value>,
-    #[serde(rename = "advisoriesUpdated")]
-    pub advisories_updated: DateTime<Utc>,
+    pub advisories: Vec<OsvAdvisory>,
+    #[serde(rename = "advisoriesUpdated", skip_serializing_if = "Option::is_none")]
+    pub advisories_updated: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct DBAdvisory {
+    pub id: Uuid,
+    #[allow(dead_code)]
+    pub package_id: Uuid,
+    pub title: String,
+    pub description: String,
+    pub affected_versions: String,
+    pub patched_versions: Option<String>,
+    pub severity: String,
+    pub url: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvAdvisory {
+    pub schema_version: String,
+    pub id: String,
+    pub modified: DateTime<Utc>,
+    pub published: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub withdrawn: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    #[serde(default)]
+    pub upstream: Vec<String>,
+    #[serde(default)]
+    pub related: Vec<String>,
+    pub summary: String,
+    pub details: String,
+    #[serde(default)]
+    pub severity: Vec<OsvSeverity>,
+    pub affected: Vec<OsvAffected>,
+    #[serde(default)]
+    pub references: Vec<OsvReference>,
+    #[serde(default)]
+    pub credits: Vec<OsvCredit>,
+    pub database_specific: OsvDatabaseSpecific,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvSeverity {
+    #[serde(rename = "type")]
+    pub severity_type: String,
+    pub score: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvCredit {
+    pub name: String,
+    #[serde(default)]
+    pub contact: Vec<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub credit_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvAffected {
+    pub package: OsvPackage,
+    #[serde(default)]
+    pub severity: Vec<OsvSeverity>,
+    pub ranges: Vec<OsvRange>,
+    #[serde(default)]
+    pub versions: Vec<String>,
+    #[serde(default)]
+    pub ecosystem_specific: std::collections::HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub database_specific: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvPackage {
+    pub ecosystem: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvRange {
+    #[serde(rename = "type")]
+    pub range_type: String,
+    pub events: Vec<OsvEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub introduced: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixed: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvReference {
+    #[serde(rename = "type")]
+    pub ref_type: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OsvDatabaseSpecific {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateAdvisoryRequest {
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_affected_versions", rename = "affectedVersions")]
+    pub affected_versions: String,
+    #[serde(rename = "patchedVersions")]
+    pub patched_versions: Option<String>,
+    #[serde(default = "default_severity")]
+    pub severity: String,
+    pub url: Option<String>,
+}
+
+fn default_affected_versions() -> String {
+    "*".to_string()
+}
+
+fn default_severity() -> String {
+    "unknown".to_string()
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]

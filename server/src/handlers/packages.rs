@@ -97,11 +97,20 @@ pub async fn list_package_versions(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let advisories_updated = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+        "SELECT MAX(updated_at) FROM advisories WHERE package_id = $1",
+    )
+    .bind(pkg.id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
     Ok(Json(PackageVersionsResponse {
         name: pkg.name,
         is_discontinued: pkg.is_discontinued,
         replaced_by: pkg.replaced_by,
-        advisories_updated: None, // TODO: Implement advisories
+        advisories_updated,
         download_count,
         like_count,
         latest,
@@ -408,7 +417,7 @@ pub async fn list_package_advisories(
     Path(package_name): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<AdvisoriesResponse>, ApiError> {
-    let _pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
+    let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
         .bind(&package_name)
         .fetch_optional(&state.db)
         .await
@@ -419,10 +428,70 @@ pub async fn list_package_advisories(
                 format!("Package {} not found", package_name),
             )
         })?;
-    // For now, return empty advisories
+
+    let db_advisories = sqlx::query_as::<_, crate::models::DBAdvisory>(
+        "SELECT * FROM advisories WHERE package_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(pkg.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let advisories_updated = db_advisories.first().map(|a| a.updated_at);
+
+    let advisories = db_advisories
+        .into_iter()
+        .map(|a| crate::models::OsvAdvisory {
+            schema_version: "1.7.5".to_string(),
+            id: a.id.to_string(),
+            modified: a.updated_at,
+            published: a.created_at,
+            withdrawn: None,
+            aliases: vec![],
+            upstream: vec![],
+            related: vec![],
+            summary: a.title,
+            details: a.description,
+            severity: vec![],
+            affected: vec![crate::models::OsvAffected {
+                package: crate::models::OsvPackage {
+                    ecosystem: "Pub".to_string(),
+                    name: pkg.name.clone(),
+                },
+                severity: vec![],
+                ranges: vec![crate::models::OsvRange {
+                    range_type: "ECOSYSTEM".to_string(),
+                    events: vec![crate::models::OsvEvent {
+                        introduced: Some(if a.affected_versions == "*" {
+                            "0".to_string()
+                        } else {
+                            a.affected_versions
+                        }),
+                        fixed: a.patched_versions,
+                    }],
+                }],
+                versions: vec![],
+                ecosystem_specific: std::collections::HashMap::new(),
+                database_specific: std::collections::HashMap::new(),
+            }],
+            references: if let Some(url) = a.url {
+                vec![crate::models::OsvReference {
+                    ref_type: "WEB".to_string(),
+                    url,
+                }]
+            } else {
+                vec![]
+            },
+            credits: vec![],
+            database_specific: crate::models::OsvDatabaseSpecific {
+                severity: Some(a.severity),
+            },
+        })
+        .collect();
+
     Ok(Json(AdvisoriesResponse {
-        advisories: vec![],
-        advisories_updated: chrono::Utc::now(),
+        advisories,
+        advisories_updated,
     }))
 }
 
@@ -618,7 +687,7 @@ pub async fn get_package_downloads(
     let days = match query.range.as_deref() {
         Some("30d") => 30,
         Some("90d") => 90,
-        Some("all") => 36500, // effectively all
+        Some("all") => 36500,
         _ => 30,
     };
 
@@ -630,7 +699,7 @@ pub async fn get_package_downloads(
         WHERE pv.package_id = $1 AND d.download_time > NOW() - INTERVAL '1 day' * $2
         GROUP BY date, pv.version
         ORDER BY date ASC
-        "#
+        "#,
     )
     .bind(pkg.id)
     .bind(days as f64)
@@ -638,5 +707,7 @@ pub async fn get_package_downloads(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(crate::models::PackageDownloadsResponse { data: records }))
+    Ok(Json(crate::models::PackageDownloadsResponse {
+        data: records,
+    }))
 }

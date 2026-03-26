@@ -80,3 +80,50 @@ export interface DownloadSeriesRow {
 export interface PackageDownloadsResponse {
     data: DownloadSeriesRow[];
 }
+
+export interface OsvEvent {
+    introduced?: string;
+    fixed?: string;
+}
+
+export interface OsvRange {
+    type: string;
+    events: OsvEvent[];
+}
+
+export interface OsvPackage {
+    ecosystem: string;
+    name: string;
+}
+
+export interface OsvAffected {
+    package: OsvPackage;
+    versions?: string[];
+    ranges: OsvRange[];
+}
+
+export interface OsvReference {
+    type: string;
+    url: string;
+}
+
+export interface OsvDatabaseSpecific {
+    severity?: string;
+}
+
+export interface Advisory {
+    schema_version: string;
+    id: string;
+    modified: string;
+    published: string;
+    summary: string;
+    details: string;
+    affected: OsvAffected[];
+    references?: OsvReference[];
+    database_specific: OsvDatabaseSpecific;
+}
+
+export interface AdvisoriesResponse {
+    advisories: Advisory[];
+    advisoriesUpdated?: string;
+}

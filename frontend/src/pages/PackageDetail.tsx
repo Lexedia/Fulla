@@ -3,6 +3,7 @@ import { A, useParams } from '@solidjs/router';
 import { getPackageDetails, getPackageVersions, getPackageDownloads, discontinuePackage, searchPackages, likePackage, unlikePackage } from '../api';
 import PanaAnalysis from '../components/PanaAnalysis';
 import DownloadsChart from '../components/DownloadsChart';
+import AdvisoriesPanel from '../components/AdvisoriesPanel';
 import { renderMarkdown } from '../utils/markdown';
 import { useAuth } from '../auth';
 import type { SearchPackage } from '../types/types';
@@ -14,6 +15,7 @@ enum Tab {
     Analysis = 'Analysis',
     Versions = 'Versions',
     Stats = 'Stats',
+    Advisories = 'Advisories',
 }
 
 const PackageDetail: Component = () => {
@@ -290,8 +292,8 @@ const PackageDetail: Component = () => {
                             </Match>
                             <Match when={activeTab() === Tab.Stats}>
                                 <div class="flex justify-end mb-6">
-                                    <select 
-                                        value={timeRange()} 
+                                    <select
+                                        value={timeRange()}
                                         onChange={(e) => setTimeRange(e.currentTarget.value)}
                                         class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg text-sm font-medium focus:ring-primary-500 focus:border-primary-500 cursor-pointer text-gray-700 dark:text-gray-200"
                                     >
@@ -302,12 +304,15 @@ const PackageDetail: Component = () => {
                                 </div>
                                 <Show when={!downloads.loading} fallback={<div class="flex justify-center p-12"><span class="loading loading-spinner text-primary-600"></span></div>}>
                                     <Show when={downloads()?.data && downloads()!.data.length > 0} fallback={<div class="text-center py-12 text-gray-500">No time-series version data available to display chart.</div>}>
-                                        <DownloadsChart 
+                                        <DownloadsChart
                                             versions={versions() || []}
                                             downloads={downloads()!.data}
                                         />
                                     </Show>
                                 </Show>
+                            </Match>
+                            <Match when={activeTab() === Tab.Advisories}>
+                                <AdvisoriesPanel packageName={params.name!} canManage={user()?.is_admin || (user()?.id === detail()?.package.owner_id && !detail()?.package.is_discontinued)} />
                             </Match>
                         </Switch>
                     </Show>
@@ -324,7 +329,7 @@ const PackageDetail: Component = () => {
                             <form onSubmit={handleDiscontinue}>
                                 <div class="bg-white dark:bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                                     <div class="sm:flex sm:items-start">
-                                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 sm:mx-0 sm:h-10 sm:w-10">
+                                        <div class="mx-auto shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 sm:mx-0 sm:h-10 sm:w-10">
                                             <CircleXIcon size={24} />
                                         </div>
                                         <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">

@@ -2,7 +2,8 @@ use crate::AppState;
 use crate::handlers::ApiError;
 use crate::handlers::auth::validate_user_auth;
 use crate::models::{
-    AdminStats, AdminUser, AdminUserResponse, CreateAdminUserRequest, SetAdminRequest,
+    AdminStats, AdminUser, AdminUserResponse, CreateAdminUserRequest, CreateAdvisoryRequest,
+    DBPackage, SetAdminRequest,
 };
 use argon2::{
     Argon2,
@@ -187,4 +188,142 @@ pub async fn create_user(
         avatar_url: user.avatar_url,
         created_at: user.created_at,
     }))
+}
+
+pub async fn create_advisory(
+    headers: HeaderMap,
+    Path(package_name): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CreateAdvisoryRequest>,
+) -> Result<Json<crate::models::OsvAdvisory>, ApiError> {
+    let user = validate_user_auth(&headers, &state.db).await?;
+
+    let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE name = $1")
+        .bind(&package_name)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| {
+            ApiError::NotFound(
+                "PackageNotFound".to_string(),
+                format!("Package {} not found", package_name),
+            )
+        })?;
+
+    let is_owner = pkg.owner_id == Some(user.id);
+    if !is_owner && !user.is_admin {
+        return Err(ApiError::Forbidden(
+            "PermissionDenied: You must be the owner or an admin to create an advisory for this package".to_string(),
+        ));
+    }
+
+    let advisory = sqlx::query_as::<_, crate::models::DBAdvisory>(
+        "INSERT INTO advisories (package_id, title, description, affected_versions, patched_versions, severity, url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+    )
+    .bind(pkg.id)
+    .bind(&payload.title)
+    .bind(&payload.description)
+    .bind(&payload.affected_versions)
+    .bind(&payload.patched_versions)
+    .bind(&payload.severity)
+    .bind(&payload.url)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(crate::models::OsvAdvisory {
+        schema_version: "1.7.5".to_string(),
+        id: advisory.id.to_string(),
+        modified: advisory.updated_at,
+        published: advisory.created_at,
+        withdrawn: None,
+        aliases: vec![],
+        upstream: vec![],
+        related: vec![],
+        summary: advisory.title,
+        details: advisory.description,
+        severity: vec![],
+        affected: vec![crate::models::OsvAffected {
+            package: crate::models::OsvPackage {
+                ecosystem: "Pub".to_string(),
+                name: pkg.name.clone(),
+            },
+            severity: vec![],
+            ranges: vec![crate::models::OsvRange {
+                range_type: "ECOSYSTEM".to_string(),
+                events: vec![crate::models::OsvEvent {
+                    introduced: Some(if advisory.affected_versions == "*" {
+                        "0".to_string()
+                    } else {
+                        advisory.affected_versions
+                    }),
+                    fixed: advisory.patched_versions,
+                }],
+            }],
+            versions: vec![],
+            ecosystem_specific: std::collections::HashMap::new(),
+            database_specific: std::collections::HashMap::new(),
+        }],
+        references: if let Some(url) = advisory.url {
+            vec![crate::models::OsvReference {
+                ref_type: "WEB".to_string(),
+                url,
+            }]
+        } else {
+            vec![]
+        },
+        credits: vec![],
+        database_specific: crate::models::OsvDatabaseSpecific {
+            severity: Some(advisory.severity),
+        },
+    }))
+}
+
+pub async fn delete_advisory(
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, ApiError> {
+    let user = validate_user_auth(&headers, &state.db).await?;
+
+    let advisory =
+        sqlx::query_as::<_, crate::models::DBAdvisory>("SELECT * FROM advisories WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or_else(|| {
+                ApiError::NotFound(
+                    "AdvisoryNotFound".to_string(),
+                    "Advisory not found".to_string(),
+                )
+            })?;
+
+    let pkg = sqlx::query_as::<_, DBPackage>("SELECT * FROM packages WHERE id = $1")
+        .bind(advisory.package_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let is_owner = pkg.owner_id == Some(user.id);
+    if !is_owner && !user.is_admin {
+        return Err(ApiError::Forbidden(
+            "PermissionDenied: You must be the owner or an admin to delete an advisory for this package".to_string(),
+        ));
+    }
+
+    let result = sqlx::query("DELETE FROM advisories WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::NotFound(
+            "AdvisoryNotFound".to_string(),
+            "Advisory not found".to_string(),
+        ));
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }

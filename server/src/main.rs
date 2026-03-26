@@ -60,7 +60,11 @@ async fn main() {
             Err(e) => {
                 retry_count += 1;
                 if retry_count >= max_retries {
-                    tracing::error!("Failed to connect to Postgres after {} attempts: {}", max_retries, e);
+                    tracing::error!(
+                        "Failed to connect to Postgres after {} attempts: {}",
+                        max_retries,
+                        e
+                    );
                     panic!("Failed to connect to Postgres: {}", e);
                 }
                 tracing::warn!(
@@ -315,6 +319,14 @@ async fn main() {
         .route(
             "/api/admin/users/{id}/admin",
             axum::routing::patch(handlers::admin::set_admin_status),
+        )
+        .route(
+            "/api/admin/packages/{package}/advisories",
+            post(handlers::admin::create_advisory),
+        )
+        .route(
+            "/api/admin/advisories/{id}",
+            delete(handlers::admin::delete_advisory),
         )
         .nest("/documentation", docs_router)
         .layer(middleware::from_fn(pub_api_headers))

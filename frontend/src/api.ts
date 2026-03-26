@@ -1,4 +1,4 @@
-import type { SearchResult, PackageDetail, PackageDownloadsResponse, PackageVersion } from "./types/types";
+import type { SearchResult, PackageDetail, PackageDownloadsResponse, PackageVersion, Advisory, AdvisoriesResponse } from "./types/types";
 import { authenticatedFetch } from "./auth";
 
 const API_BASE = '/api';
@@ -68,7 +68,6 @@ export async function uploadAvatar(file: File): Promise<{ avatar_url: string }> 
     return response.json();
 }
 
-// Token Management
 export interface Token {
     id: string;
     token: string;
@@ -239,3 +238,40 @@ export async function createAdminUser(username: string, password: string, isAdmi
 }
 
 
+export async function getPackageAdvisories(name: string): Promise<AdvisoriesResponse> {
+    const response = await fetch(`${API_BASE}/packages/${name}/advisories`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch advisories');
+    }
+    return response.json();
+}
+
+export async function createAdvisory(packageName: string, advisory: {
+    title: string;
+    description?: string;
+    affectedVersions?: string;
+    patchedVersions?: string;
+    severity?: string;
+    url?: string;
+}): Promise<Advisory> {
+    const response = await authenticatedFetch(`${API_BASE}/admin/packages/${packageName}/advisories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(advisory),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'Failed to create advisory');
+    }
+    return response.json();
+}
+
+export async function deleteAdvisory(id: string): Promise<void> {
+    const response = await authenticatedFetch(`${API_BASE}/admin/advisories/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'Failed to delete advisory');
+    }
+}
