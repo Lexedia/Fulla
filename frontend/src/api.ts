@@ -28,7 +28,7 @@ export async function searchPackages(query: string, page: number = 1, limit: num
 }
 
 export async function getPackageDetails(name: string, version: string = 'latest'): Promise<PackageDetail> {
-    const response = await fetch(`${API_BASE}/packages/${name}/versions/${version}/details`);
+    const response = await authenticatedFetch(`${API_BASE}/packages/${name}/versions/${version}/details`);
     if (!response.ok) {
         throw new Error('Failed to fetch package details');
     }
