@@ -145,7 +145,12 @@ async fn run_analysis(state: Arc<AppState>, name: String, version: String) -> an
         }
     }
 
-    let pana_output = Command::new("pana")
+    #[cfg(target_os = "windows")]
+    let pana_cmd = "pana.bat";
+    #[cfg(not(target_os = "windows"))]
+    let pana_cmd = "pana";
+
+    let pana_output = Command::new(pana_cmd)
         .arg("--json")
         .current_dir(&extract_path)
         .output()
@@ -248,7 +253,12 @@ async fn generate_docs(
 ) -> anyhow::Result<()> {
     info!("Generating documentation for {} v{}", name, version);
 
-    let output = match Command::new("dartdoc")
+    #[cfg(target_os = "windows")]
+    let dartdoc_cmd = "dartdoc.bat";
+    #[cfg(not(target_os = "windows"))]
+    let dartdoc_cmd = "dartdoc";
+
+    let output = match Command::new(dartdoc_cmd)
         .current_dir(extract_path)
         .output()
         .await
@@ -286,6 +296,18 @@ async fn generate_docs(
         return Ok(());
     }
 
+    #[cfg(target_os = "windows")]
+    let status = Command::new("xcopy")
+        .arg("/E")
+        .arg("/I")
+        .arg("/Y")
+        .arg(".")
+        .arg(&docs_dir)
+        .current_dir(&api_dir)
+        .status()
+        .await?;
+
+    #[cfg(not(target_os = "windows"))]
     let status = Command::new("cp")
         .arg("-r")
         .arg(".")
