@@ -1,4 +1,4 @@
-use crate::AppState;
+use crate::{AppState, utils::copy_dir};
 use std::sync::Arc;
 use tokio::process::Command;
 use tracing::{error, info};
@@ -296,27 +296,9 @@ async fn generate_docs(
         return Ok(());
     }
 
-    #[cfg(target_os = "windows")]
-    let status = Command::new("xcopy")
-        .arg("/E")
-        .arg("/I")
-        .arg("/Y")
-        .arg(".")
-        .arg(&docs_dir)
-        .current_dir(&api_dir)
-        .status()
-        .await?;
+    let status = copy_dir(&api_dir, &docs_dir).await;
 
-    #[cfg(not(target_os = "windows"))]
-    let status = Command::new("cp")
-        .arg("-r")
-        .arg(".")
-        .arg(&docs_dir)
-        .current_dir(&api_dir)
-        .status()
-        .await?;
-
-    if !status.success() {
+    if status.is_err() {
         error!("Failed to copy docs to storage");
         return Err(anyhow::anyhow!("Failed to copy docs"));
     }

@@ -231,6 +231,35 @@ pub async fn create_advisory(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let all_versions = sqlx::query_scalar::<_, String>(
+        "SELECT version FROM package_versions WHERE package_id = $1"
+    )
+    .bind(pkg.id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut affected_vers = Vec::new();
+    if advisory.affected_versions == "*" {
+        affected_vers = all_versions.clone();
+    } else if let Ok(req) = semver::VersionReq::parse(&advisory.affected_versions) {
+        let patched_req = advisory.patched_versions.as_ref().and_then(|p| semver::VersionReq::parse(p).ok());
+        for v in &all_versions {
+            if let Ok(ver) = semver::Version::parse(v) {
+                if req.matches(&ver) {
+                    if let Some(ref p_req) = patched_req {
+                        if p_req.matches(&ver) {
+                            continue;
+                        }
+                    }
+                    affected_vers.push(v.clone());
+                }
+            }
+        }
+    }
+
+    let pub_display_url = advisory.url.clone();
+
     Ok(Json(crate::models::OsvAdvisory {
         schema_version: "1.7.5".to_string(),
         id: advisory.id.to_string(),
@@ -260,7 +289,7 @@ pub async fn create_advisory(
                     fixed: advisory.patched_versions,
                 }],
             }],
-            versions: vec![],
+            versions: affected_vers,
             ecosystem_specific: std::collections::HashMap::new(),
             database_specific: std::collections::HashMap::new(),
         }],
@@ -275,6 +304,7 @@ pub async fn create_advisory(
         credits: vec![],
         database_specific: crate::models::OsvDatabaseSpecific {
             severity: Some(advisory.severity),
+            pub_display_url,
         },
     }))
 }

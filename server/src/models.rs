@@ -218,6 +218,8 @@ pub struct OsvReference {
 pub struct OsvDatabaseSpecific {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub severity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pub_display_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -439,53 +439,85 @@ pub async fn list_package_advisories(
 
     let advisories_updated = db_advisories.first().map(|a| a.updated_at);
 
+    let all_versions = sqlx::query_scalar::<_, String>(
+        "SELECT version FROM package_versions WHERE package_id = $1"
+    )
+    .bind(pkg.id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
     let advisories = db_advisories
         .into_iter()
-        .map(|a| crate::models::OsvAdvisory {
-            schema_version: "1.7.5".to_string(),
-            id: a.id.to_string(),
-            modified: a.updated_at,
-            published: a.created_at,
-            withdrawn: None,
-            aliases: vec![],
-            upstream: vec![],
-            related: vec![],
-            summary: a.title,
-            details: a.description,
-            severity: vec![],
-            affected: vec![crate::models::OsvAffected {
-                package: crate::models::OsvPackage {
-                    ecosystem: "Pub".to_string(),
-                    name: pkg.name.clone(),
-                },
+        .map(|a| {
+            let mut affected_vers = Vec::new();
+            if a.affected_versions == "*" {
+                affected_vers = all_versions.clone();
+            } else if let Ok(req) = semver::VersionReq::parse(&a.affected_versions) {
+                let patched_req = a.patched_versions.as_ref().and_then(|p| semver::VersionReq::parse(p).ok());
+                for v in &all_versions {
+                    if let Ok(ver) = semver::Version::parse(v) {
+                        if req.matches(&ver) {
+                            if let Some(ref p_req) = patched_req {
+                                if p_req.matches(&ver) {
+                                    continue;
+                                }
+                            }
+                            affected_vers.push(v.clone());
+                        }
+                    }
+                }
+            }
+
+            let pub_display_url = a.url.clone();
+
+            crate::models::OsvAdvisory {
+                schema_version: "1.7.5".to_string(),
+                id: a.id.to_string(),
+                modified: a.updated_at,
+                published: a.created_at,
+                withdrawn: None,
+                aliases: vec![],
+                upstream: vec![],
+                related: vec![],
+                summary: a.title,
+                details: a.description,
                 severity: vec![],
-                ranges: vec![crate::models::OsvRange {
-                    range_type: "ECOSYSTEM".to_string(),
-                    events: vec![crate::models::OsvEvent {
-                        introduced: Some(if a.affected_versions == "*" {
-                            "0".to_string()
-                        } else {
-                            a.affected_versions
-                        }),
-                        fixed: a.patched_versions,
+                affected: vec![crate::models::OsvAffected {
+                    package: crate::models::OsvPackage {
+                        ecosystem: "Pub".to_string(),
+                        name: pkg.name.clone(),
+                    },
+                    severity: vec![],
+                    ranges: vec![crate::models::OsvRange {
+                        range_type: "ECOSYSTEM".to_string(),
+                        events: vec![crate::models::OsvEvent {
+                            introduced: Some(if a.affected_versions == "*" {
+                                "0".to_string()
+                            } else {
+                                a.affected_versions
+                            }),
+                            fixed: a.patched_versions,
+                        }],
                     }],
+                    versions: affected_vers,
+                    ecosystem_specific: std::collections::HashMap::new(),
+                    database_specific: std::collections::HashMap::new(),
                 }],
-                versions: vec![],
-                ecosystem_specific: std::collections::HashMap::new(),
-                database_specific: std::collections::HashMap::new(),
-            }],
-            references: if let Some(url) = a.url {
-                vec![crate::models::OsvReference {
-                    ref_type: "WEB".to_string(),
-                    url,
-                }]
-            } else {
-                vec![]
-            },
-            credits: vec![],
-            database_specific: crate::models::OsvDatabaseSpecific {
-                severity: Some(a.severity),
-            },
+                references: if let Some(url) = a.url {
+                    vec![crate::models::OsvReference {
+                        ref_type: "WEB".to_string(),
+                        url,
+                    }]
+                } else {
+                    vec![]
+                },
+                credits: vec![],
+                database_specific: crate::models::OsvDatabaseSpecific {
+                    severity: Some(a.severity),
+                    pub_display_url,
+                },
+            }
         })
         .collect();
 
