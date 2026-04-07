@@ -3,11 +3,9 @@ import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-// Import themes
 import githubDark from 'shiki/themes/github-dark.mjs';
 import githubLight from 'shiki/themes/github-light.mjs';
 
-// Import languages
 import dart from 'shiki/langs/dart.mjs';
 import yaml from 'shiki/langs/yaml.mjs';
 import json from 'shiki/langs/json.mjs';
@@ -35,12 +33,12 @@ export async function renderMarkdown(text: string): Promise<string> {
     const renderer = new marked.Renderer();
     const originalCode = renderer.code.bind(renderer);
 
-    renderer.code = function ({ text, lang, escaped }: { text: string; lang?: string; escaped?: boolean }) {
+    type Code = Parameters<typeof renderer.code>[0];
+
+    renderer.code = function ({ text, lang, escaped, ...rest }: Code) {
         const args = { text, lang, escaped };
         if (lang && highlighter) {
             try {
-                // Use the highlighter to generate HTML
-                // We use one theme for now, or could handle dark/light if the highlighter supports it easily
                 return highlighter.codeToHtml(text, {
                     lang,
                     themes: {
@@ -53,7 +51,7 @@ export async function renderMarkdown(text: string): Promise<string> {
             }
         }
         // Fallback to default renderer if no language or highlighting fails
-        return originalCode(args as any);
+        return originalCode({ ...args, ...rest });
     };
 
     const rawHtml = await marked.parse(text, { renderer, async: true });
