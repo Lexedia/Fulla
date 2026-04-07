@@ -38,6 +38,22 @@ body {
   min-height: 100vh;
 }
 
+.pana-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+}
+
+.pana-check svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.pana-check span {
+  flex: 1;
+}
+
 /* Shiki Dual Theme Support */
 html.dark .shiki,
 html.dark .shiki span {
