@@ -1,4 +1,4 @@
-import { createHighlighterCore, type HighlighterCore } from 'shiki/core';
+import { createHighlighterCore, type HighlighterCore, type LanguageRegistration } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -6,22 +6,36 @@ import DOMPurify from 'dompurify';
 import githubDark from 'shiki/themes/github-dark.mjs';
 import githubLight from 'shiki/themes/github-light.mjs';
 
-import dart from 'shiki/langs/dart.mjs';
-import yaml from 'shiki/langs/yaml.mjs';
-import json from 'shiki/langs/json.mjs';
-import markdown from 'shiki/langs/markdown.mjs';
-import typescript from 'shiki/langs/typescript.mjs';
-import javascript from 'shiki/langs/javascript.mjs';
-import bash from 'shiki/langs/bash.mjs';
-import sql from 'shiki/langs/sql.mjs';
+const langNames = [
+    // Generic languages projects would use
+    'dart',
+    'yaml',
+    'json',
+    'markdown',
+    'typescript',
+    'javascript',
+    'bash',
+
+    // DB
+    'sql',
+
+
+    // FFI
+    'rust',
+    'c',
+    'cpp'
+] as const
 
 let highlighter: HighlighterCore | null = null;
 
 export async function initHighlighter() {
     if (!highlighter) {
+        const langs = await Promise.all(langNames.map(name => import(/* @vite-ignore */ `shiki/langs/${name}.mjs`))) as LanguageRegistration[]
+
+
         highlighter = await createHighlighterCore({
             themes: [githubDark, githubLight],
-            langs: [dart, yaml, json, markdown, typescript, javascript, bash, sql],
+            langs,
             engine: createJavaScriptRegexEngine()
         });
     }
