@@ -21,7 +21,16 @@ enum Tab {
 const PackageDetail: Component = () => {
     const params = useParams();
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = createSignal<Tab>(Tab.Readme);
+    const tabValues = Object.values(Tab) as Tab[];
+    const hashTab = () => {
+        const h = window.location.hash.slice(1).toLowerCase();
+        return tabValues.find(t => t.toLowerCase() === h);
+    };
+    const [activeTab, setActiveTabRaw] = createSignal<Tab>(hashTab() || Tab.Readme);
+    const setActiveTab = (tab: Tab) => {
+        setActiveTabRaw(tab);
+        window.location.hash = tab.toLowerCase();
+    };
     const [isDiscontinueModalOpen, setIsDiscontinueModalOpen] = createSignal(false);
     const [replacementPackage, setReplacementPackage] = createSignal("");
     const [confirmPackageName, setConfirmPackageName] = createSignal("");
