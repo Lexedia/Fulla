@@ -49,23 +49,22 @@ export async function renderMarkdown(text: string): Promise<string> {
 
     type Code = Parameters<typeof renderer.code>[0];
 
-    renderer.code = function ({ text, lang, escaped, ...rest }: Code) {
-        const args = { text, lang, escaped };
-        if (lang && highlighter) {
+    renderer.code = function (args: Code) {
+        if (args.lang && highlighter) {
             try {
-                return highlighter.codeToHtml(text, {
-                    lang,
+                return highlighter.codeToHtml(args.text, {
+                    lang: args.lang,
                     themes: {
                         light: 'github-light',
                         dark: 'github-dark'
                     }
                 });
             } catch (e) {
-                console.warn('Shiki highlighting failed for lang:', lang, e);
+                console.warn('Shiki highlighting failed for lang:', args.lang, e);
             }
         }
         // Fallback to default renderer if no language or highlighting fails
-        return originalCode({ ...args, ...rest });
+        return originalCode(args);
     };
 
     const rawHtml = await marked.parse(text, { renderer, async: true });
