@@ -238,27 +238,42 @@ async fn main() {
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
         .allow_credentials(true);
 
-    let app = Router::new()
+    let pub_v2_routes = Router::new()
         .route(
             "/api/packages/{package}",
-            get(handlers::packages::list_package_versions)
-                .patch(handlers::packages::discontinue_package),
-        )
-        .route(
-            "/api/packages/{package}/like",
-            post(handlers::packages::like_package).delete(handlers::packages::unlike_package),
+            get(handlers::packages::list_package_versions),
         )
         .route(
             "/api/packages/{package}/advisories",
             get(handlers::packages::list_package_advisories),
         )
         .route(
-            "/api/packages/{package}/versions/{version}/details",
-            get(handlers::packages::get_package_details),
-        )
-        .route(
             "/api/packages/{package}/versions/{version}",
             get(handlers::packages::inspect_package_version),
+        )
+        .route(
+            "/api/packages/versions/new",
+            get(handlers::upload::publish_new_version),
+        )
+        .route(
+            "/api/publish/finalize/{id}",
+            get(handlers::upload::finalize_publish),
+        )
+        .layer(middleware::from_fn(pub_api_headers));
+
+    let app = Router::new()
+        .merge(pub_v2_routes)
+        .route(
+            "/api/packages/{package}",
+            axum::routing::patch(handlers::packages::discontinue_package),
+        )
+        .route(
+            "/api/packages/{package}/like",
+            post(handlers::packages::like_package).delete(handlers::packages::unlike_package),
+        )
+        .route(
+            "/api/packages/{package}/versions/{version}/details",
+            get(handlers::packages::get_package_details),
         )
         .route(
             "/api/packages/{package}/versions",
@@ -269,17 +284,9 @@ async fn main() {
             get(handlers::packages::get_package_downloads),
         )
         .route(
-            "/api/packages/versions/new",
-            get(handlers::upload::publish_new_version),
-        )
-        .route(
             "/api/upload",
             post(handlers::upload::upload_package)
                 .layer(DefaultBodyLimit::max(max_upload_size as usize)),
-        )
-        .route(
-            "/api/publish/finalize/{id}",
-            get(handlers::upload::finalize_publish),
         )
         .route(
             "/packages/{name}/versions/{version}",
@@ -329,7 +336,6 @@ async fn main() {
             delete(handlers::admin::delete_advisory),
         )
         .nest("/documentation", docs_router)
-        .layer(middleware::from_fn(pub_api_headers))
         .layer(cors)
         .with_state(state);
 
