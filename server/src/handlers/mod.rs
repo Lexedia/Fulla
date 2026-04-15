@@ -49,17 +49,16 @@ impl IntoResponse for ApiError {
                 message: message.clone(),
             },
         });
-        let mut response = if include_auth {
-            let sanitized_msg = body.error.message.replace('\\', "\\\\").replace('"', "\\\"");
+        if include_auth {
+            let sanitized_msg = body
+                .error
+                .message
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"");
             let www_auth = format!("Bearer realm=\"pub\", message=\"{}\"", sanitized_msg);
             (status, [(header::WWW_AUTHENTICATE, www_auth)], body).into_response()
         } else {
             (status, body).into_response()
-        };
-        response.headers_mut().insert(
-            header::CONTENT_TYPE,
-            "application/vnd.pub.v2+json".parse().unwrap(),
-        );
-        response
+        }
     }
 }
